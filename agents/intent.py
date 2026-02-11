@@ -22,15 +22,24 @@ def build_student_prompt(
     For the 'answer' intent, a random roll determines whether the student
     should answer correctly or make a mistake, based on *correct_answer_prob*.
     """
-    parts = [base_prompt, f"\n\n--- Текущее намерение ---\n{intent_prompt}"]
+    parts = [
+        base_prompt,
+        f"\n\n--- ОБЯЗАТЕЛЬНОЕ НАМЕРЕНИЕ (следуй строго!) ---\n{intent_prompt}",
+    ]
 
     if intent_id == "answer":
         if random.randint(1, 100) <= correct_answer_prob:
             parts.append("\n\n--- Точность ---\nОтветь ПРАВИЛЬНО. Дай верный ответ.")
         else:
             parts.append(
-                "\n\n--- Точность ---\nДопусти ОШИБКУ. Дай неправильный ответ — "
-                "перепутай знак, посчитай неверно или примени не ту формулу."
+                "\n\n--- Точность ---\n"
+                "ОБЯЗАТЕЛЬНО допусти ОШИБКУ. Твой ответ ДОЛЖЕН быть НЕПРАВИЛЬНЫМ.\n"
+                "Способы ошибиться (выбери один):\n"
+                "- Перепутай знак: напиши + вместо - или наоборот\n"
+                "- Посчитай неверно: 7*8=54, 15-8=6\n"
+                "- Примени не ту формулу\n"
+                "- Забудь про минус или скобки\n"
+                "НИКОГДА не давай правильный ответ при этой инструкции."
             )
 
     return "".join(parts)
