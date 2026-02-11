@@ -7,10 +7,12 @@ import streamlit as st
 from dotenv import load_dotenv
 
 from config.defaults import (
+    DEFAULT_CORRECT_ANSWER_PROB,
     DEFAULT_INTENT_WEIGHTS,
     DEFAULT_STUDENT_PROMPTS,
     DEFAULT_TEACHER_PROMPT,
     INTENTS,
+    TEACHER_GREETING,
 )
 from config.settings import DEFAULT_MAX_TOKENS, DEFAULT_TEMPERATURE
 
@@ -46,11 +48,12 @@ def init_session_state():
         # Intent weights and prompts
         "intent_weights": copy.deepcopy(DEFAULT_INTENT_WEIGHTS["Слабый"]),
         "intent_prompts": {i["id"]: i["prompt"] for i in INTENTS},
+        "correct_answer_prob": DEFAULT_CORRECT_ANSWER_PROB["Слабый"],
         # Generation parameters
         "temperature": DEFAULT_TEMPERATURE,
         "max_tokens": DEFAULT_MAX_TOKENS,
-        # Dialog state
-        "messages": [],  # list of dicts: {agent, content, intent_id}
+        # Dialog state (starts with static greeting)
+        "messages": [{"agent": "teacher", "content": TEACHER_GREETING, "intent_id": None}],
         "step_count": 0,
         "running": False,
         "one_step_pending": False,

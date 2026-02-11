@@ -16,6 +16,7 @@ class StudentAgent:
         intent_prompts: dict[str, str],
         temperature: float,
         max_tokens: int,
+        correct_answer_prob: int = 50,
     ) -> tuple[str, str]:
         """Generate student response with intent selection.
 
@@ -25,7 +26,9 @@ class StudentAgent:
         Returns (response_text, intent_id).
         """
         intent_id, intent_prompt = pick_intent(intent_weights, intent_prompts)
-        system_prompt = build_student_prompt(self.base_prompt, intent_prompt)
+        system_prompt = build_student_prompt(
+            self.base_prompt, intent_id, intent_prompt, correct_answer_prob
+        )
 
         response = self.provider.generate_response(
             system_prompt=system_prompt,

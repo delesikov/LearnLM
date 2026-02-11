@@ -7,7 +7,8 @@ import streamlit as st
 
 from agents.student import StudentAgent
 from agents.teacher import TeacherAgent
-from config.defaults import AVAILABLE_MODELS
+from config.defaults import AVAILABLE_MODELS, TEACHER_GREETING
+from config.scenarios import TASK_SCENARIOS, TOPIC_SCENARIOS
 from config.settings import MAX_DIALOG_STEPS, STUDENT_AVATAR, TEACHER_AVATAR
 from models.base import Message
 from models.gemini_provider import GeminiProvider
@@ -72,7 +73,7 @@ def _get_student_history() -> list[Message]:
     return history
 
 
-def _validate() -> bool:
+def validate_config() -> bool:
     """Validate that intents sum to 100% and API keys are set."""
     total = sum(st.session_state.intent_weights.values())
     if total != 100:
@@ -110,6 +111,11 @@ def _stream_teacher_turn() -> bool:
             max_tokens=st.session_state.max_tokens,
         )
 
+    # Detect [SOLVED] marker and strip it before display
+    solved = "[SOLVED]" in response
+    if solved:
+        response = response.replace("[SOLVED]", "").strip()
+
     with st.chat_message("assistant", avatar=TEACHER_AVATAR):
         st.write_stream(_stream_text(response))
 
@@ -122,6 +128,10 @@ def _stream_teacher_turn() -> bool:
     # Increment step count after teacher responds to student (not initial greeting)
     if len(st.session_state.messages) > 1:
         st.session_state.step_count += 1
+
+    if solved:
+        st.session_state.running = False
+        st.success("Задача решена! Сессия завершена.")
 
     return True
 
@@ -141,6 +151,7 @@ def _stream_student_turn() -> bool:
             intent_prompts=st.session_state.intent_prompts,
             temperature=st.session_state.temperature,
             max_tokens=st.session_state.max_tokens,
+            correct_answer_prob=st.session_state.get("correct_answer_prob", 50),
         )
 
     with st.chat_message("user", avatar=STUDENT_AVATAR):
@@ -155,7 +166,33 @@ def _stream_student_turn() -> bool:
     return True
 
 
-def _export_dialog() -> str:
+def _get_first_student_input() -> str | None:
+    """Resolve the first student input from scenario selector or custom text."""
+    cat = st.session_state.get("scenario_cat", "Свой ввод")
+    if cat == "Задача":
+        idx = st.session_state.get("task_select", 0)
+        return TASK_SCENARIOS[idx]
+    elif cat == "Тема":
+        idx = st.session_state.get("topic_select", 0)
+        return TOPIC_SCENARIOS[idx]
+    else:
+        custom = st.session_state.get("custom_input", "").strip()
+        return custom if custom else None
+
+
+def _inject_student_input(text: str):
+    """Display and record a pre-made / custom student message."""
+    with st.chat_message("user", avatar=STUDENT_AVATAR):
+        st.write_stream(_stream_text(text))
+
+    st.session_state.messages.append({
+        "agent": "student",
+        "content": text,
+        "intent_id": None,
+    })
+
+
+def export_dialog() -> str:
     """Export dialog as JSON string."""
     data = {
         "config": {
@@ -171,50 +208,6 @@ def _export_dialog() -> str:
     return json.dumps(data, ensure_ascii=False, indent=2)
 
 
-def render_controls():
-    """Render control buttons."""
-    col1, col2, col3, col4, col5 = st.columns(5)
-
-    with col1:
-        start = st.button("\u25b6\ufe0f Запустить", key="btn_start", disabled=st.session_state.running)
-    with col2:
-        stop = st.button("\u23f8\ufe0f Остановить", key="btn_stop", disabled=not st.session_state.running)
-    with col3:
-        one_step = st.button("\u23ed\ufe0f Один шаг", key="btn_step", disabled=st.session_state.running)
-    with col4:
-        clear = st.button("\U0001f5d1\ufe0f Очистить", key="btn_clear")
-    with col5:
-        if st.session_state.messages:
-            st.download_button(
-                "\U0001f4e5 Экспорт JSON",
-                data=_export_dialog(),
-                file_name="dialog.json",
-                mime="application/json",
-                key="btn_export",
-            )
-
-    if clear:
-        st.session_state.messages = []
-        st.session_state.step_count = 0
-        st.session_state.running = False
-        st.session_state.one_step_pending = False
-        st.rerun()
-
-    if stop:
-        st.session_state.running = False
-        st.rerun()
-
-    if one_step:
-        if not _validate():
-            return
-        st.session_state.one_step_pending = True
-        st.rerun()
-
-    if start:
-        if not _validate():
-            return
-        st.session_state.running = True
-        st.rerun()
 
 
 def execute_turn():
@@ -232,10 +225,17 @@ def execute_turn():
 
     messages = st.session_state.messages
 
-    if not messages:
-        ok = _stream_teacher_turn()
-    elif messages[-1]["agent"] == "teacher":
-        ok = _stream_student_turn()
+    if messages[-1]["agent"] == "teacher":
+        # After teacher's greeting, inject pre-selected input instead of AI student
+        if len(messages) == 1:
+            first_input = _get_first_student_input()
+            if first_input:
+                _inject_student_input(first_input)
+                ok = True
+            else:
+                ok = _stream_student_turn()
+        else:
+            ok = _stream_student_turn()
     else:
         ok = _stream_teacher_turn()
 
