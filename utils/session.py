@@ -37,15 +37,17 @@ def init_session_state():
         "yandex_folder_id": _get_secret("YANDEX_FOLDER_ID"),
         # Teacher settings
         "teacher_model": "Gemini 3 Flash",
-        "teacher_thinking_level": "low",
+        "teacher_thinking_level": "medium",
         "teacher_reasoning_effort": None,
         "teacher_prompt": DEFAULT_TEACHER_PROMPT,
+        "teacher_show_reasoning": True,
         # Student settings
         "student_type": "Слабый",
         "student_model": "GPT OSS 120B (Yandex)",
         "student_thinking_level": None,
-        "student_reasoning_effort": "low",
+        "student_reasoning_effort": "medium",
         "student_prompt": DEFAULT_STUDENT_PROMPTS["Слабый"],
+        "student_show_reasoning": True,
         # Intent weights and prompts
         "intent_weights": copy.deepcopy(DEFAULT_INTENT_WEIGHTS["Слабый"]),
         "intent_prompts": {i["id"]: i["prompt"] for i in INTENTS},

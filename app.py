@@ -1,6 +1,10 @@
 """LearnLM — Симулятор урока: AI Teacher-Student Chat."""
 
+import logging
+
 import streamlit as st
+
+logging.basicConfig(level=logging.DEBUG, format="%(name)s %(levelname)s: %(message)s")
 
 from config.settings import APP_TITLE
 from ui.chat_area import render_chat

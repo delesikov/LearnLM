@@ -67,12 +67,13 @@ def pick_intent_llm(
     recent_history = history[-10:]
 
     try:
-        raw = provider.generate_response(
+        result = provider.generate_response(
             system_prompt=system_prompt,
             history=recent_history,
             temperature=0.3,
             max_tokens=50,
         )
+        raw = result.text
         chosen_id = raw.strip().lower().strip(".,!\"'` \n")
         if chosen_id in intent_prompts:
             log.info("LLM chose intent: %s", chosen_id)

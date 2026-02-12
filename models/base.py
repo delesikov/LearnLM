@@ -1,13 +1,19 @@
 """Abstract base class for LLM providers."""
 
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 
 @dataclass
 class Message:
     role: str  # "user" or "assistant"
     content: str
+
+
+@dataclass
+class LLMResponse:
+    text: str
+    reasoning: str | None = None
 
 
 class BaseProvider(ABC):
@@ -18,6 +24,6 @@ class BaseProvider(ABC):
         history: list[Message],
         temperature: float,
         max_tokens: int,
-    ) -> str:
+    ) -> LLMResponse:
         """Generate a response given system prompt and conversation history."""
         ...

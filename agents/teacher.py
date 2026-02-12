@@ -1,6 +1,6 @@
 """Teacher agent logic."""
 
-from models.base import BaseProvider, Message
+from models.base import BaseProvider, LLMResponse, Message
 
 
 class TeacherAgent:
@@ -13,7 +13,7 @@ class TeacherAgent:
         history: list[Message],
         temperature: float,
         max_tokens: int,
-    ) -> str:
+    ) -> LLMResponse:
         """Generate teacher response.
 
         History is from the teacher's perspective:

@@ -210,6 +210,12 @@ def render_sidebar():
         # ── Teacher ─────────────────────────────────────────
         with st.expander("Репетитор", expanded=False):
             _model_options("teacher")
+            st.toggle(
+                "Показывать рассуждения",
+                value=st.session_state.teacher_show_reasoning,
+                key="toggle_teacher_reasoning",
+            )
+            st.session_state.teacher_show_reasoning = st.session_state.toggle_teacher_reasoning
             if st.button("Редактировать промпт", key="btn_edit_teacher"):
                 _edit_prompt(
                     "teacher_prompt",
@@ -239,6 +245,12 @@ def render_sidebar():
             )
 
             _model_options("student")
+            st.toggle(
+                "Показывать рассуждения",
+                value=st.session_state.student_show_reasoning,
+                key="toggle_student_reasoning",
+            )
+            st.session_state.student_show_reasoning = st.session_state.toggle_student_reasoning
             if st.button("Редактировать промпт", key="btn_edit_student"):
                 _edit_prompt(
                     "student_prompt",

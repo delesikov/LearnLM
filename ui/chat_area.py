@@ -71,12 +71,18 @@ def render_chat():
         if msg["agent"] == "teacher":
             with st.chat_message("assistant", avatar=TEACHER_AVATAR):
                 st.markdown('<div class="chat-teacher"></div>', unsafe_allow_html=True)
+                if msg.get("reasoning") and st.session_state.get("teacher_show_reasoning", True):
+                    with st.expander("💭 Рассуждения модели"):
+                        st.markdown(msg["reasoning"])
                 st.markdown(msg["content"])
         else:
             with st.chat_message("user", avatar=STUDENT_AVATAR):
                 st.markdown('<div class="chat-student"></div>', unsafe_allow_html=True)
                 if msg.get("intent_id"):
                     st.caption(f"Намерение: **{msg['intent_id']}**")
+                if msg.get("reasoning") and st.session_state.get("student_show_reasoning", True):
+                    with st.expander("💭 Рассуждения модели"):
+                        st.markdown(msg["reasoning"])
                 st.markdown(msg["content"])
 
     if st.session_state.messages:

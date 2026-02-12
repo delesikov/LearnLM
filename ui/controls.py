@@ -105,11 +105,14 @@ def _stream_teacher_turn() -> bool:
     teacher = TeacherAgent(provider, st.session_state.teacher_prompt)
 
     with st.spinner("\U0001f468\u200d\U0001f3eb Репетитор думает..."):
-        response = teacher.generate(
+        llm_response = teacher.generate(
             history=_get_teacher_history(),
             temperature=st.session_state.temperature,
             max_tokens=st.session_state.max_tokens,
         )
+
+    response = llm_response.text
+    reasoning = llm_response.reasoning
 
     # Detect [SOLVED] marker and strip it before display
     solved = "[SOLVED]" in response
@@ -117,11 +120,15 @@ def _stream_teacher_turn() -> bool:
         response = response.replace("[SOLVED]", "").strip()
 
     with st.chat_message("assistant", avatar=TEACHER_AVATAR):
+        if reasoning and st.session_state.get("teacher_show_reasoning", True):
+            with st.expander("💭 Рассуждения модели"):
+                st.markdown(reasoning)
         st.write_stream(_stream_text(response))
 
     st.session_state.messages.append({
         "agent": "teacher",
         "content": response,
+        "reasoning": reasoning,
         "intent_id": None,
     })
 
@@ -155,7 +162,7 @@ def _stream_student_turn() -> bool:
         }
 
     with st.spinner("\U0001f392 Ученик думает..."):
-        response, intent_id = student.generate(
+        llm_response, intent_id = student.generate(
             history=_get_student_history(),
             intent_weights=st.session_state.intent_weights,
             intent_prompts=st.session_state.intent_prompts,
@@ -165,13 +172,20 @@ def _stream_student_turn() -> bool:
             **llm_kwargs,
         )
 
+    response = llm_response.text
+    reasoning = llm_response.reasoning
+
     with st.chat_message("user", avatar=STUDENT_AVATAR):
         st.caption(f"Намерение: **{intent_id}**")
+        if reasoning and st.session_state.get("student_show_reasoning", True):
+            with st.expander("💭 Рассуждения модели"):
+                st.markdown(reasoning)
         st.write_stream(_stream_text(response))
 
     st.session_state.messages.append({
         "agent": "student",
         "content": response,
+        "reasoning": reasoning,
         "intent_id": intent_id,
     })
     return True

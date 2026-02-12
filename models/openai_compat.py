@@ -3,7 +3,7 @@
 import openai
 
 from config.settings import YANDEX_BASE_URL
-from models.base import BaseProvider, Message
+from models.base import BaseProvider, LLMResponse, Message
 
 
 class OpenAICompatProvider(BaseProvider):
@@ -28,10 +28,11 @@ class OpenAICompatProvider(BaseProvider):
         history: list[Message],
         temperature: float,
         max_tokens: int,
-    ) -> str:
+    ) -> LLMResponse:
         input_messages = []
         for msg in history:
-            input_messages.append({"role": msg.role, "content": msg.content})
+            if msg.content.strip():
+                input_messages.append({"role": msg.role, "content": msg.content})
 
         if not input_messages:
             input_messages.append({"role": "user", "content": "Начни диалог."})
@@ -48,4 +49,15 @@ class OpenAICompatProvider(BaseProvider):
             kwargs["reasoning"] = {"effort": self.reasoning_effort}
 
         response = self.client.responses.create(**kwargs)
-        return response.output_text
+
+        reasoning_text = None
+        for item in response.output:
+            if item.type == "reasoning":
+                parts = []
+                for s in getattr(item, "summary", []):
+                    if hasattr(s, "text"):
+                        parts.append(s.text)
+                if parts:
+                    reasoning_text = "\n".join(parts)
+
+        return LLMResponse(text=response.output_text, reasoning=reasoning_text)
