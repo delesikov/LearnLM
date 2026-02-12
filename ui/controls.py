@@ -7,7 +7,7 @@ import streamlit as st
 
 from agents.student import StudentAgent
 from agents.teacher import TeacherAgent
-from config.defaults import AVAILABLE_MODELS, TEACHER_GREETING
+from config.defaults import AVAILABLE_MODELS, INTENTS, TEACHER_GREETING
 from config.scenarios import TASK_SCENARIOS, TOPIC_SCENARIOS
 from config.settings import MAX_DIALOG_STEPS, STUDENT_AVATAR, TEACHER_AVATAR
 from models.base import Message
@@ -144,6 +144,16 @@ def _stream_student_turn() -> bool:
 
     student = StudentAgent(provider, st.session_state.student_prompt)
 
+    intent_mode = st.session_state.get("intent_mode", "random")
+    llm_kwargs = {}
+    if intent_mode == "llm":
+        llm_kwargs = {
+            "intent_mode": "llm",
+            "intent_names": {i["id"]: i["name"] for i in INTENTS},
+            "student_type": st.session_state.student_type,
+            "classifier_template": st.session_state.get("classifier_prompt", ""),
+        }
+
     with st.spinner("\U0001f392 Ученик думает..."):
         response, intent_id = student.generate(
             history=_get_student_history(),
@@ -152,6 +162,7 @@ def _stream_student_turn() -> bool:
             temperature=st.session_state.temperature,
             max_tokens=st.session_state.max_tokens,
             correct_answer_prob=st.session_state.get("correct_answer_prob", 50),
+            **llm_kwargs,
         )
 
     with st.chat_message("user", avatar=STUDENT_AVATAR):

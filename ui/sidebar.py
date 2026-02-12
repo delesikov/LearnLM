@@ -4,6 +4,7 @@ import copy
 
 import streamlit as st
 
+from agents.intent import DEFAULT_CLASSIFIER_TEMPLATE
 from config.defaults import (
     AVAILABLE_MODELS,
     DEFAULT_CORRECT_ANSWER_PROB,
@@ -246,6 +247,38 @@ def render_sidebar():
 
         # ── Intents ─────────────────────────────────────────
         with st.expander("Интенты", expanded=False):
+            # Intent selection mode
+            INTENT_MODES = ["random", "llm"]
+            INTENT_MODE_LABELS = {
+                "random": "Случайный (по весам)",
+                "llm": "LLM-классификатор",
+            }
+            mode_idx = INTENT_MODES.index(st.session_state.intent_mode)
+            chosen_mode = st.radio(
+                "Способ выбора интента",
+                INTENT_MODES,
+                index=mode_idx,
+                format_func=lambda m: INTENT_MODE_LABELS[m],
+                horizontal=True,
+                key="radio_intent_mode",
+            )
+            st.session_state.intent_mode = chosen_mode
+
+            if chosen_mode == "random":
+                st.caption("Интент выбирается случайно по весам ниже.")
+            else:
+                st.caption(
+                    "LLM анализирует контекст диалога и выбирает подходящий интент. "
+                    "Веса используются как ориентир распределения."
+                )
+                if st.button("✏️ Промпт классификатора", key="btn_edit_classifier"):
+                    _edit_prompt(
+                        "classifier_prompt",
+                        None,
+                        DEFAULT_CLASSIFIER_TEMPLATE,
+                        "Промпт классификатора интентов",
+                    )
+
             weights = st.session_state.intent_weights
             prompts = st.session_state.intent_prompts
 

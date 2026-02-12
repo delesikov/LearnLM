@@ -6,6 +6,7 @@ import os
 import streamlit as st
 from dotenv import load_dotenv
 
+from agents.intent import DEFAULT_CLASSIFIER_TEMPLATE
 from config.defaults import (
     DEFAULT_CORRECT_ANSWER_PROB,
     DEFAULT_INTENT_WEIGHTS,
@@ -35,20 +36,22 @@ def init_session_state():
         "yandex_api_key": _get_secret("YANDEX_API_KEY"),
         "yandex_folder_id": _get_secret("YANDEX_FOLDER_ID"),
         # Teacher settings
-        "teacher_model": "Gemini 2.5 Flash",
-        "teacher_thinking_level": None,
+        "teacher_model": "Gemini 3 Flash",
+        "teacher_thinking_level": "low",
         "teacher_reasoning_effort": None,
         "teacher_prompt": DEFAULT_TEACHER_PROMPT,
         # Student settings
         "student_type": "Слабый",
-        "student_model": "Gemini 2.5 Flash",
+        "student_model": "GPT OSS 120B (Yandex)",
         "student_thinking_level": None,
-        "student_reasoning_effort": None,
+        "student_reasoning_effort": "low",
         "student_prompt": DEFAULT_STUDENT_PROMPTS["Слабый"],
         # Intent weights and prompts
         "intent_weights": copy.deepcopy(DEFAULT_INTENT_WEIGHTS["Слабый"]),
         "intent_prompts": {i["id"]: i["prompt"] for i in INTENTS},
         "correct_answer_prob": DEFAULT_CORRECT_ANSWER_PROB["Слабый"],
+        "intent_mode": "random",  # "random" or "llm"
+        "classifier_prompt": DEFAULT_CLASSIFIER_TEMPLATE,
         # Generation parameters
         "temperature": DEFAULT_TEMPERATURE,
         "max_tokens": DEFAULT_MAX_TOKENS,

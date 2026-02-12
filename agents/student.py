@@ -1,6 +1,6 @@
 """Student agent logic with intent system."""
 
-from agents.intent import pick_intent, build_student_prompt
+from agents.intent import pick_intent, pick_intent_llm, build_student_prompt
 from models.base import BaseProvider, Message
 
 
@@ -17,15 +17,30 @@ class StudentAgent:
         temperature: float,
         max_tokens: int,
         correct_answer_prob: int = 50,
+        intent_mode: str = "random",
+        intent_names: dict[str, str] | None = None,
+        student_type: str = "",
+        classifier_template: str = "",
     ) -> tuple[str, str]:
         """Generate student response with intent selection.
 
-        History is from the student's perspective:
-        student = assistant, teacher = user (roles are flipped).
+        intent_mode: "random" (weighted random) or "llm" (LLM classifier).
 
         Returns (response_text, intent_id).
         """
-        intent_id, intent_prompt = pick_intent(intent_weights, intent_prompts)
+        if intent_mode == "llm" and intent_names:
+            intent_id, intent_prompt = pick_intent_llm(
+                provider=self.provider,
+                history=history,
+                intent_names=intent_names,
+                intent_prompts=intent_prompts,
+                intent_weights=intent_weights,
+                student_type=student_type,
+                classifier_template=classifier_template,
+            )
+        else:
+            intent_id, intent_prompt = pick_intent(intent_weights, intent_prompts)
+
         system_prompt = build_student_prompt(
             self.base_prompt, intent_id, intent_prompt, correct_answer_prob
         )
