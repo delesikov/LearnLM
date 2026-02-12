@@ -152,7 +152,7 @@ def _scenario_label(text: str, num: int) -> str:
 def render_sidebar():
     with st.sidebar:
         # ── Player controls ────────────────────────────────
-        c1, c2, c3, c4 = st.columns(4)
+        c1, c2, c3, c4, c5 = st.columns(5)
         with c1:
             start = st.button("▶️", key="btn_start", disabled=st.session_state.running, use_container_width=True, help="Запустить")
         with c2:
@@ -160,7 +160,9 @@ def render_sidebar():
         with c3:
             step = st.button("⏭️", key="btn_step", disabled=st.session_state.running, use_container_width=True, help="Один шаг")
         with c4:
-            clear = st.button("🗑️", key="btn_clear", use_container_width=True, help="Очистить")
+            clear = st.button("📝", key="btn_clear", use_container_width=True, help="Новый диалог")
+        with c5:
+            reset = st.button("🔄", key="btn_reset", use_container_width=True, help="Сброс всего")
 
         # ── Export ──────────────────────────────────────────
         if len(st.session_state.messages) > 1:
@@ -359,6 +361,11 @@ def render_sidebar():
             st.session_state.step_count = 0
             st.session_state.running = False
             st.session_state.one_step_pending = False
+            st.rerun()
+
+        if reset:
+            for key in list(st.session_state.keys()):
+                del st.session_state[key]
             st.rerun()
 
         if stop:
