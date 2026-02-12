@@ -2,6 +2,7 @@
 
 import logging
 import random
+import re
 from pathlib import Path
 
 from models.base import BaseProvider, Message
@@ -19,6 +20,20 @@ _ANSWER_CORRECT_PROMPT = (
 _ANSWER_WRONG_PROMPT = (
     (_PROMPTS_DIR / "intent_answer_wrong.md").read_text(encoding="utf-8").strip()
 )
+
+
+_PLAN_QUESTIONS = re.compile(
+    r"начина|подходит|согласен|хочешь.{0,15}изменить|готов|начнём|начнем|поехали|приступ",
+    re.IGNORECASE,
+)
+_NUMBERED_LIST = re.compile(r"\d\.\s")
+
+
+def _is_plan_message(text: str) -> bool:
+    """Check if teacher message proposes a plan (numbered list + confirmation question)."""
+    has_list = bool(_NUMBERED_LIST.search(text))
+    has_question = bool(_PLAN_QUESTIONS.search(text))
+    return has_list and has_question
 
 
 def pick_intent(intent_weights: dict[str, int], intent_prompts: dict[str, str]) -> tuple[str, str]:
@@ -46,6 +61,17 @@ def pick_intent_llm(
     Falls back to random selection if LLM response can't be parsed.
     Returns (intent_id, intent_prompt).
     """
+    # Правило: учитель предложил план → agree-with-tutor (без вызова LLM)
+    if history and "agree-with-tutor" in intent_prompts:
+        last_teacher = None
+        for msg in reversed(history):
+            if msg.role == "user":  # в истории ученика учитель = user
+                last_teacher = msg.content
+                break
+        if last_teacher and _is_plan_message(last_teacher):
+            log.info("Rule: teacher proposed a plan → agree-with-tutor")
+            return "agree-with-tutor", intent_prompts["agree-with-tutor"]
+
     template = classifier_template or DEFAULT_CLASSIFIER_TEMPLATE
 
     # Build intents list for the classifier prompt
