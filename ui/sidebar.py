@@ -167,14 +167,21 @@ def render_sidebar():
         # ── Export ──────────────────────────────────────────
         if len(st.session_state.messages) > 1:
             from ui.controls import export_dialog
-            st.download_button(
-                "\U0001f4e5 Экспорт JSON",
-                data=export_dialog(),
-                file_name="dialog.json",
-                mime="application/json",
-                key="btn_export",
-                use_container_width=True,
-            )
+            ec1, ec2 = st.columns(2)
+            with ec1:
+                st.download_button(
+                    "\U0001f4e5 JSON",
+                    data=export_dialog(),
+                    file_name="dialog.json",
+                    mime="application/json",
+                    key="btn_export",
+                    use_container_width=True,
+                )
+            with ec2:
+                if st.button("📊 В таблицу", key="btn_gsheets", use_container_width=True):
+                    from utils.gsheets import export_to_sheets
+                    if export_to_sheets():
+                        st.toast("Диалог сохранён в Google Sheets!", icon="✅")
 
         # ── Scenario selector ──────────────────────────────
         if len(st.session_state.messages) <= 1:
