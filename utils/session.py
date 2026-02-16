@@ -52,7 +52,7 @@ def init_session_state():
         "intent_weights": copy.deepcopy(DEFAULT_INTENT_WEIGHTS["Слабый"]),
         "intent_prompts": {i["id"]: i["prompt"] for i in INTENTS},
         "correct_answer_prob": DEFAULT_CORRECT_ANSWER_PROB["Слабый"],
-        "intent_mode": "random",  # "random" or "llm"
+        "intent_mode": "llm",  # "random" or "llm"
         "classifier_prompt": DEFAULT_CLASSIFIER_TEMPLATE,
         # Generation parameters
         "temperature": DEFAULT_TEMPERATURE,

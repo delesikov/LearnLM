@@ -96,6 +96,17 @@ def validate_config() -> bool:
     return True
 
 
+def _show_api_error(agent_name: str, error: Exception):
+    """Display a user-friendly API error message."""
+    error_type = type(error).__name__
+    st.error(
+        f"**{agent_name}: ошибка API**\n\n"
+        f"`{error_type}`: {error}\n\n"
+        "Попробуйте ещё раз или смените модель.",
+        icon="\u26a0\ufe0f",
+    )
+
+
 def _stream_teacher_turn() -> bool:
     """Generate and stream one teacher message."""
     provider = _create_provider("teacher")
@@ -104,12 +115,16 @@ def _stream_teacher_turn() -> bool:
 
     teacher = TeacherAgent(provider, st.session_state.teacher_prompt)
 
-    with st.spinner("\U0001f468\u200d\U0001f3eb Репетитор думает..."):
-        llm_response = teacher.generate(
-            history=_get_teacher_history(),
-            temperature=st.session_state.temperature,
-            max_tokens=st.session_state.max_tokens,
-        )
+    try:
+        with st.spinner("\U0001f468\u200d\U0001f3eb Репетитор думает..."):
+            llm_response = teacher.generate(
+                history=_get_teacher_history(),
+                temperature=st.session_state.temperature,
+                max_tokens=st.session_state.max_tokens,
+            )
+    except Exception as e:
+        _show_api_error("Репетитор", e)
+        return False
 
     response = llm_response.text
     reasoning = llm_response.reasoning
@@ -161,16 +176,20 @@ def _stream_student_turn() -> bool:
             "classifier_template": st.session_state.get("classifier_prompt", ""),
         }
 
-    with st.spinner("\U0001f392 Ученик думает..."):
-        llm_response, intent_id = student.generate(
-            history=_get_student_history(),
-            intent_weights=st.session_state.intent_weights,
-            intent_prompts=st.session_state.intent_prompts,
-            temperature=st.session_state.temperature,
-            max_tokens=st.session_state.max_tokens,
-            correct_answer_prob=st.session_state.get("correct_answer_prob", 50),
-            **llm_kwargs,
-        )
+    try:
+        with st.spinner("\U0001f392 Ученик думает..."):
+            llm_response, intent_id = student.generate(
+                history=_get_student_history(),
+                intent_weights=st.session_state.intent_weights,
+                intent_prompts=st.session_state.intent_prompts,
+                temperature=st.session_state.temperature,
+                max_tokens=st.session_state.max_tokens,
+                correct_answer_prob=st.session_state.get("correct_answer_prob", 50),
+                **llm_kwargs,
+            )
+    except Exception as e:
+        _show_api_error("Ученик", e)
+        return False
 
     response = llm_response.text
     reasoning = llm_response.reasoning
