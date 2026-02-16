@@ -1,11 +1,16 @@
 """Google Gemini provider using google-genai SDK."""
 
 import logging
+import time
 
 from google import genai
 from google.genai import types
+from google.genai.errors import ServerError
 
 from models.base import BaseProvider, LLMResponse, Message
+
+MAX_RETRIES = 3
+RETRY_DELAY = 2  # seconds
 
 log = logging.getLogger(__name__)
 
@@ -43,11 +48,20 @@ class GeminiProvider(BaseProvider):
                 include_thoughts=True,
             )
 
-        response = self.client.models.generate_content(
-            model=self.model_id,
-            contents=contents,
-            config=config,
-        )
+        for attempt in range(1, MAX_RETRIES + 1):
+            try:
+                response = self.client.models.generate_content(
+                    model=self.model_id,
+                    contents=contents,
+                    config=config,
+                )
+                break
+            except ServerError as e:
+                if attempt < MAX_RETRIES:
+                    log.warning("Gemini ServerError (attempt %d/%d): %s", attempt, MAX_RETRIES, e)
+                    time.sleep(RETRY_DELAY * attempt)
+                else:
+                    raise
 
         text = ""
         thinking_text = None
