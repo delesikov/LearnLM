@@ -14,18 +14,20 @@ HEADERS = [
     "id",
     "datetime",
     "teacher_model",
+    "teacher_thinking_level",
     "student_model",
     "student_type",
+    "student_thinking_level",
+    "student_reasoning_effort",
     "intent_mode",
     "temperature",
     "max_tokens",
-    "teacher_thinking_level",
-    "student_reasoning_effort",
     "correct_answer_prob",
     "intent_weights",
     "step_count",
     "num_messages",
     "dialog",
+    "reasoning",
 ]
 
 
@@ -67,26 +69,46 @@ def export_to_sheets() -> bool:
     sheet_name = now.strftime("%Y-%m-%d")
     worksheet = _get_or_create_sheet(spreadsheet, sheet_name)
 
+    # Collect reasoning from all messages into a separate JSON
+    messages = st.session_state.get("messages", [])
+    reasoning_list = []
+    for msg in messages:
+        r = msg.get("reasoning")
+        if r:
+            reasoning_list.append({
+                "agent": msg.get("agent"),
+                "reasoning": r,
+            })
+
+    # Strip reasoning from dialog JSON to keep it cleaner
+    dialog_clean = []
+    for msg in messages:
+        dialog_clean.append({
+            "agent": msg.get("agent"),
+            "content": msg.get("content", ""),
+            "intent_id": msg.get("intent_id"),
+        })
+
     row = [
         str(uuid.uuid4())[:8],
         now.strftime("%Y-%m-%d %H:%M:%S"),
         st.session_state.get("teacher_model", ""),
+        st.session_state.get("teacher_thinking_level", "") or "",
         st.session_state.get("student_model", ""),
         st.session_state.get("student_type", ""),
+        st.session_state.get("student_thinking_level", "") or "",
+        st.session_state.get("student_reasoning_effort", "") or "",
         st.session_state.get("intent_mode", ""),
         st.session_state.get("temperature", ""),
         st.session_state.get("max_tokens", ""),
-        st.session_state.get("teacher_thinking_level", ""),
-        st.session_state.get("student_reasoning_effort", ""),
         st.session_state.get("correct_answer_prob", ""),
         json.dumps(
             st.session_state.get("intent_weights", {}), ensure_ascii=False
         ),
         st.session_state.get("step_count", 0),
-        len(st.session_state.get("messages", [])),
-        json.dumps(
-            st.session_state.get("messages", []), ensure_ascii=False
-        ),
+        len(messages),
+        json.dumps(dialog_clean, ensure_ascii=False),
+        json.dumps(reasoning_list, ensure_ascii=False) if reasoning_list else "",
     ]
 
     try:
