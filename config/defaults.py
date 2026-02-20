@@ -41,7 +41,7 @@ STUDENT_TYPES = ["Слабый", "Средний", "Сильный"]
 
 # ─── Default teacher prompt ─────────────────────────────────────────
 
-DEFAULT_TEACHER_PROMPT = _load_prompt("teacher.md")
+DEFAULT_TEACHER_PROMPT = _load_prompt("learnlm_teacher_v1.md")
 
 # ─── Default student prompts (per type) ─────────────────────────────
 
