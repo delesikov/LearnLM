@@ -10,6 +10,8 @@ from agents.intent import DEFAULT_CLASSIFIER_TEMPLATE
 from config.defaults import (
     DEFAULT_CORRECT_ANSWER_PROB,
     DEFAULT_INTENT_WEIGHTS,
+    DEFAULT_MISTAKE_WEIGHTS,
+    DEFAULT_SITUATION_WEIGHTS,
     DEFAULT_STUDENT_PROMPTS,
     DEFAULT_TEACHER_PROMPT,
     INTENTS,
@@ -37,7 +39,7 @@ def init_session_state():
         "yandex_folder_id": _get_secret("YANDEX_FOLDER_ID"),
         # Teacher settings
         "teacher_model": "Gemini 3 Flash",
-        "teacher_thinking_level": "medium",
+        "teacher_thinking_level": "high",
         "teacher_reasoning_effort": None,
         "teacher_prompt": DEFAULT_TEACHER_PROMPT,
         "teacher_show_reasoning": True,
@@ -52,8 +54,10 @@ def init_session_state():
         "intent_weights": copy.deepcopy(DEFAULT_INTENT_WEIGHTS["Слабый"]),
         "intent_prompts": {i["id"]: i["prompt"] for i in INTENTS},
         "correct_answer_prob": DEFAULT_CORRECT_ANSWER_PROB["Слабый"],
+        "mistake_weights": copy.deepcopy(DEFAULT_MISTAKE_WEIGHTS["Слабый"]),
         "intent_mode": "llm",  # "random" or "llm"
         "classifier_prompt": DEFAULT_CLASSIFIER_TEMPLATE,
+        "situation_weights": copy.deepcopy(DEFAULT_SITUATION_WEIGHTS["Слабый"]),
         # Generation parameters
         "temperature": DEFAULT_TEMPERATURE,
         "max_tokens": DEFAULT_MAX_TOKENS,

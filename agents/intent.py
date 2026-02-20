@@ -2,9 +2,9 @@
 
 import logging
 import random
-import re
 from pathlib import Path
 
+from config.defaults import MISTAKE_TYPES
 from models.base import BaseProvider, Message
 
 log = logging.getLogger(__name__)
@@ -17,23 +17,20 @@ DEFAULT_CLASSIFIER_TEMPLATE = (
 _ANSWER_CORRECT_PROMPT = (
     (_PROMPTS_DIR / "intent_answer_correct.md").read_text(encoding="utf-8").strip()
 )
-_ANSWER_WRONG_PROMPT = (
+_ANSWER_WRONG_TEMPLATE = (
     (_PROMPTS_DIR / "intent_answer_wrong.md").read_text(encoding="utf-8").strip()
 )
 
 
-_PLAN_QUESTIONS = re.compile(
-    r"начина|подходит|согласен|хочешь.{0,15}изменить|готов|начнём|начнем|поехали|приступ",
-    re.IGNORECASE,
-)
-_NUMBERED_LIST = re.compile(r"\d\.\s")
 
-
-def _is_plan_message(text: str) -> bool:
-    """Check if teacher message proposes a plan (numbered list + confirmation question)."""
-    has_list = bool(_NUMBERED_LIST.search(text))
-    has_question = bool(_PLAN_QUESTIONS.search(text))
-    return has_list and has_question
+def pick_mistake(mistake_weights: dict[str, int]) -> dict:
+    """Pick a mistake type by weights. Returns one MISTAKE_TYPES entry."""
+    ids = [m["id"] for m in MISTAKE_TYPES]
+    weights = [mistake_weights.get(mid, 0) for mid in ids]
+    if sum(weights) == 0:
+        weights = [1] * len(ids)
+    chosen_id = random.choices(ids, weights=weights, k=1)[0]
+    return next(m for m in MISTAKE_TYPES if m["id"] == chosen_id)
 
 
 def pick_intent(intent_weights: dict[str, int], intent_prompts: dict[str, str]) -> tuple[str, str]:
@@ -50,75 +47,67 @@ def pick_intent(intent_weights: dict[str, int], intent_prompts: dict[str, str]) 
 def pick_intent_llm(
     provider: BaseProvider,
     history: list[Message],
-    intent_names: dict[str, str],
+    situation_weights: dict[str, dict[str, int]],
     intent_prompts: dict[str, str],
-    intent_weights: dict[str, int],
-    student_type: str,
     classifier_template: str = "",
 ) -> tuple[str, str]:
-    """Use LLM to select a context-aware intent.
+    """Use LLM to classify the teacher's situation, then pick intent by situation weights.
 
-    Falls back to random selection if LLM response can't be parsed.
+    LLM returns a single situation_id → lookup situation_weights[situation_id]
+    → weighted random.choices() among intents with weight > 0.
+    Falls back to aggregate weights across all situations if LLM response can't be parsed.
     Returns (intent_id, intent_prompt).
     """
-    # Правило: учитель предложил план → agree-with-tutor (без вызова LLM)
-    if history and "agree-with-tutor" in intent_prompts:
-        last_teacher = None
-        for msg in reversed(history):
-            if msg.role == "user":  # в истории ученика учитель = user
-                last_teacher = msg.content
-                break
-        if last_teacher and _is_plan_message(last_teacher):
-            log.info("Rule: teacher proposed a plan → agree-with-tutor")
-            return "agree-with-tutor", intent_prompts["agree-with-tutor"]
-
     template = classifier_template or DEFAULT_CLASSIFIER_TEMPLATE
-
-    # Build intents list for the classifier prompt
-    total = sum(intent_weights.values()) or 1
-    lines = []
-    for iid, name in intent_names.items():
-        w = intent_weights.get(iid, 0)
-        if w > 0:
-            pct = round(w / total * 100)
-            lines.append(f"- {iid} ({pct}%) — {name}")
-
-    intents_list = "\n".join(lines)
-    system_prompt = template.format(
-        student_type=student_type,
-        intents_list=intents_list,
-    )
 
     # Classifier only needs recent context, not the full dialog
     recent_history = history[-10:]
 
     try:
         result = provider.generate_response(
-            system_prompt=system_prompt,
+            system_prompt=template,
             history=recent_history,
             temperature=0.3,
-            max_tokens=50,
+            max_tokens=30,
         )
-        raw = result.text
-        chosen_id = raw.strip().lower().strip(".,!\"'` \n")
-        if chosen_id in intent_prompts:
-            log.info("LLM chose intent: %s", chosen_id)
-            return chosen_id, intent_prompts[chosen_id]
+        situation_id = result.text.strip().lower().strip(".,!\"'` \n")
 
-        log.warning("LLM returned unknown intent '%s', falling back to random", raw.strip())
+        if situation_id in situation_weights:
+            weights = situation_weights[situation_id]
+            valid = {iid: w for iid, w in weights.items() if w > 0 and iid in intent_prompts}
+            if valid:
+                ids = list(valid.keys())
+                wts = [valid[iid] for iid in ids]
+                chosen_id = random.choices(ids, weights=wts, k=1)[0]
+                log.info("Situation: %s → intent: %s", situation_id, chosen_id)
+                return chosen_id, intent_prompts[chosen_id]
+
+        log.warning("LLM returned unknown situation '%s', falling back to aggregate", situation_id)
     except Exception:
-        log.exception("LLM intent selection failed, falling back to random")
+        log.exception("LLM intent selection failed, falling back to aggregate")
 
-    return pick_intent(intent_weights, intent_prompts)
+    # Fallback: aggregate weights across all situations → weighted random
+    agg: dict[str, int] = {}
+    for sit_weights in situation_weights.values():
+        for iid, w in sit_weights.items():
+            if iid in intent_prompts:
+                agg[iid] = agg.get(iid, 0) + w
+    return pick_intent(agg, intent_prompts)
 
 
 def build_student_prompt(
-    base_prompt: str, intent_id: str, intent_prompt: str, correct_answer_prob: int = 50
+    base_prompt: str,
+    intent_id: str,
+    intent_prompt: str,
+    correct_answer_prob: int = 50,
+    mistake_weights: dict[str, int] | None = None,
 ) -> str:
     """Combine student base prompt with the current intent prompt.
 
     For the 'answer' intent, a random roll determines whether the student
     should answer correctly or make a mistake, based on *correct_answer_prob*.
+    When wrong, a mistake type is picked by *mistake_weights* and injected
+    into the prompt template.
     """
     # Intent goes FIRST so the model sees the directive before the character description.
     intent_block = f"⚠️ ЗАДАЧА НА ЭТОТ ХОД:\n{intent_prompt}"
@@ -127,6 +116,11 @@ def build_student_prompt(
         if random.randint(1, 100) <= correct_answer_prob:
             intent_block += f"\n\n{_ANSWER_CORRECT_PROMPT}"
         else:
-            intent_block += f"\n\n{_ANSWER_WRONG_PROMPT}"
+            mistake = pick_mistake(mistake_weights or {})
+            log.info("Mistake type: %s", mistake["id"])
+            wrong_prompt = _ANSWER_WRONG_TEMPLATE.format(
+                mistake_description=mistake["description"]
+            )
+            intent_block += f"\n\n{wrong_prompt}"
 
     return f"{intent_block}\n\n---\n\n{base_prompt}"

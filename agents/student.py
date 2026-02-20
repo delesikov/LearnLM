@@ -18,31 +18,30 @@ class StudentAgent:
         max_tokens: int,
         correct_answer_prob: int = 50,
         intent_mode: str = "random",
-        intent_names: dict[str, str] | None = None,
-        student_type: str = "",
+        situation_weights: dict[str, dict[str, int]] | None = None,
         classifier_template: str = "",
+        mistake_weights: dict[str, int] | None = None,
     ) -> tuple[LLMResponse, str]:
         """Generate student response with intent selection.
 
-        intent_mode: "random" (weighted random) or "llm" (LLM classifier).
+        intent_mode: "random" (weighted random from intent_weights)
+                  or "llm" (LLM classifies teacher situation → situation_weights lookup).
 
         Returns (LLMResponse, intent_id).
         """
-        if intent_mode == "llm" and intent_names:
+        if intent_mode == "llm" and situation_weights:
             intent_id, intent_prompt = pick_intent_llm(
                 provider=self.provider,
                 history=history,
-                intent_names=intent_names,
+                situation_weights=situation_weights,
                 intent_prompts=intent_prompts,
-                intent_weights=intent_weights,
-                student_type=student_type,
                 classifier_template=classifier_template,
             )
         else:
             intent_id, intent_prompt = pick_intent(intent_weights, intent_prompts)
 
         system_prompt = build_student_prompt(
-            self.base_prompt, intent_id, intent_prompt, correct_answer_prob
+            self.base_prompt, intent_id, intent_prompt, correct_answer_prob, mistake_weights
         )
 
         llm_response = self.provider.generate_response(

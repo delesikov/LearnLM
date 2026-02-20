@@ -9,10 +9,14 @@ from config.defaults import (
     AVAILABLE_MODELS,
     DEFAULT_CORRECT_ANSWER_PROB,
     DEFAULT_INTENT_WEIGHTS,
+    DEFAULT_MISTAKE_WEIGHTS,
+    DEFAULT_SITUATION_WEIGHTS,
     DEFAULT_STUDENT_PROMPTS,
     DEFAULT_TEACHER_PROMPT,
     INTENTS,
+    MISTAKE_TYPES,
     REASONING_EFFORTS,
+    SITUATIONS,
     STUDENT_TYPES,
     TEACHER_GREETING,
     THINKING_LEVELS,
@@ -84,6 +88,20 @@ def _clamp_weight(changed_id: str):
         weights[changed_id] = st.session_state[f"weight_{changed_id}"]
 
 
+def _clamp_sit_weight(sit_id: str, changed_iid: str):
+    """Prevent total situation intent weights from exceeding 100."""
+    weights = st.session_state.situation_weights[sit_id]
+    for intent in INTENTS:
+        wkey = f"sit_{sit_id}_{intent['id']}"
+        if wkey in st.session_state:
+            weights[intent["id"]] = st.session_state[wkey]
+    total = sum(weights.values())
+    if total > 100:
+        clamped = weights[changed_iid] - (total - 100)
+        st.session_state[f"sit_{sit_id}_{changed_iid}"] = max(clamped, 0)
+        weights[changed_iid] = st.session_state[f"sit_{sit_id}_{changed_iid}"]
+
+
 def _reset_intents():
     """Callback: reset intent weights and prompts to current student type defaults."""
     stype = st.session_state.student_type
@@ -95,8 +113,28 @@ def _reset_intents():
         st.session_state.intent_prompts[intent["id"]] = intent["prompt"]
 
 
+def _clamp_mistake_weight(changed_id: str):
+    """Prevent total mistake weights from exceeding 100."""
+    weights = st.session_state.mistake_weights
+    for m in MISTAKE_TYPES:
+        wkey = f"mw_{m['id']}"
+        if wkey in st.session_state:
+            weights[m["id"]] = st.session_state[wkey]
+    total = sum(weights.values())
+    if total > 100:
+        clamped = weights[changed_id] - (total - 100)
+        st.session_state[f"mw_{changed_id}"] = max(clamped, 0)
+        weights[changed_id] = st.session_state[f"mw_{changed_id}"]
+
+
+def _reset_situation_weights():
+    """Callback: reset situation weights to defaults for current student type."""
+    stype = st.session_state.student_type
+    st.session_state.situation_weights = copy.deepcopy(DEFAULT_SITUATION_WEIGHTS[stype])
+
+
 def _on_student_type_change():
-    """Callback: update student prompt, intent weights, and correct answer prob when type changes."""
+    """Callback: update student prompt, intent weights, situation weights, mistake weights and correct answer prob when type changes."""
     student_type = st.session_state.radio_student_type
     st.session_state.student_type = student_type
     st.session_state.student_prompt = DEFAULT_STUDENT_PROMPTS[student_type]
@@ -104,8 +142,10 @@ def _on_student_type_change():
     st.session_state.intent_weights = new_weights
     for iid, val in new_weights.items():
         st.session_state[f"weight_{iid}"] = val
+    st.session_state.situation_weights = copy.deepcopy(DEFAULT_SITUATION_WEIGHTS[student_type])
     st.session_state.correct_answer_prob = DEFAULT_CORRECT_ANSWER_PROB[student_type]
     st.session_state.slider_correct_prob = DEFAULT_CORRECT_ANSWER_PROB[student_type]
+    st.session_state.mistake_weights = copy.deepcopy(DEFAULT_MISTAKE_WEIGHTS[student_type])
 
 
 def _model_options(prefix: str, default_model_key: str = "teacher_model"):
@@ -251,6 +291,40 @@ def render_sidebar():
                 key="slider_correct_prob",
             )
 
+            # Mistake type weights (shown only when wrong answers are possible)
+            if st.session_state.correct_answer_prob < 100:
+                wrong_pct = 100 - st.session_state.correct_answer_prob
+                mw = st.session_state.mistake_weights
+
+                # Sync dict from widget keys
+                for m in MISTAKE_TYPES:
+                    wkey = f"mw_{m['id']}"
+                    if wkey in st.session_state:
+                        mw[m["id"]] = st.session_state[wkey]
+
+                mw_total = sum(mw.values())
+                mw_remaining = 100 - mw_total
+                with st.expander(f"Типы ошибок (при неправильном ответе, {wrong_pct}%) — {mw_total}%", expanded=False):
+                    for m in MISTAKE_TYPES:
+                        mid = m["id"]
+                        mw[mid] = st.slider(
+                            m["name"],
+                            min_value=0,
+                            max_value=100,
+                            value=mw.get(mid, 0),
+                            key=f"mw_{mid}",
+                            on_change=_clamp_mistake_weight,
+                            args=(mid,),
+                            help=m["description"],
+                        )
+                    if mw_remaining > 0:
+                        st.caption(f"Нераспределено: {mw_remaining}%")
+                    stype_defaults = DEFAULT_MISTAKE_WEIGHTS[st.session_state.student_type]
+                    if mw != stype_defaults:
+                        if st.button("Сбросить к дефолтам", key="btn_reset_mistakes"):
+                            st.session_state.mistake_weights = copy.deepcopy(stype_defaults)
+                            st.rerun()
+
             _model_options("student")
             st.toggle(
                 "Показывать рассуждения",
@@ -287,70 +361,121 @@ def render_sidebar():
 
             if chosen_mode == "random":
                 st.caption("Интент выбирается случайно по весам ниже.")
+
+                weights = st.session_state.intent_weights
+                prompts = st.session_state.intent_prompts
+
+                # Sync dict from widget keys
+                for intent in INTENTS:
+                    wkey = f"weight_{intent['id']}"
+                    if wkey in st.session_state:
+                        weights[intent["id"]] = st.session_state[wkey]
+
+                remaining = 100 - sum(weights.values())
+
+                profile_name = "Настраиваемый"
+                for name, preset in DEFAULT_INTENT_WEIGHTS.items():
+                    if weights == preset:
+                        profile_name = name
+                        break
+                is_custom = profile_name == "Настраиваемый"
+
+                st.caption(f"Профиль: {profile_name} | Очков: {remaining}")
+
+                for intent in INTENTS:
+                    iid = intent["id"]
+                    current = weights.get(iid, 0)
+                    col1, col2 = st.columns([5, 1])
+                    with col1:
+                        weights[iid] = st.slider(
+                            f"{intent['name']} ({iid})",
+                            min_value=0,
+                            max_value=100,
+                            value=current,
+                            key=f"weight_{iid}",
+                            on_change=_clamp_weight,
+                            args=(iid,),
+                            help=INTENT_HELP.get(iid),
+                        )
+                    with col2:
+                        st.markdown("")
+                        st.markdown("")
+                        if st.button("✏️", key=f"btn_edit_{iid}"):
+                            _edit_prompt(
+                                "intent_prompts",
+                                iid,
+                                intent["prompt"],
+                                f"Промпт: {intent['name']}",
+                            )
+
+                if is_custom:
+                    st.button(
+                        "Сбросить к дефолтам",
+                        key="btn_reset_intents",
+                        on_click=_reset_intents,
+                    )
+
             else:
+                # LLM mode — situation-based weights editor
                 st.caption(
-                    "LLM анализирует контекст диалога и выбирает подходящий интент. "
-                    "Веса используются как ориентир распределения."
+                    "LLM определяет тип реплики тьютора (ситуацию) и выбирает "
+                    "интент по весам для этой ситуации."
                 )
                 if st.button("✏️ Промпт классификатора", key="btn_edit_classifier"):
                     _edit_prompt(
                         "classifier_prompt",
                         None,
                         DEFAULT_CLASSIFIER_TEMPLATE,
-                        "Промпт классификатора интентов",
+                        "Промпт классификатора ситуаций",
                     )
 
-            weights = st.session_state.intent_weights
-            prompts = st.session_state.intent_prompts
+                for situation in SITUATIONS:
+                    sid = situation["id"]
+                    sname = situation["name"]
+                    sit_w = st.session_state.situation_weights[sid]
 
-            # Sync dict from widget keys
-            for intent in INTENTS:
-                wkey = f"weight_{intent['id']}"
-                if wkey in st.session_state:
-                    weights[intent["id"]] = st.session_state[wkey]
+                    # Sync from widget keys
+                    for intent in INTENTS:
+                        wkey = f"sit_{sid}_{intent['id']}"
+                        if wkey in st.session_state:
+                            sit_w[intent["id"]] = st.session_state[wkey]
 
-            remaining = 100 - sum(weights.values())
+                    total = sum(sit_w.values())
+                    remaining = 100 - total
+                    label = f"{sname}  —  {total}%"
 
-            profile_name = "Настраиваемый"
-            for name, preset in DEFAULT_INTENT_WEIGHTS.items():
-                if weights == preset:
-                    profile_name = name
-                    break
-            is_custom = profile_name == "Настраиваемый"
+                    with st.expander(label, expanded=False):
+                        for intent in INTENTS:
+                            iid = intent["id"]
+                            col1, col2 = st.columns([5, 1])
+                            with col1:
+                                sit_w[iid] = st.slider(
+                                    f"{intent['name']} ({iid})",
+                                    min_value=0,
+                                    max_value=100,
+                                    value=sit_w.get(iid, 0),
+                                    key=f"sit_{sid}_{iid}",
+                                    on_change=_clamp_sit_weight,
+                                    args=(sid, iid),
+                                    help=INTENT_HELP.get(iid),
+                                )
+                            with col2:
+                                st.markdown("")
+                                st.markdown("")
+                                if st.button("✏️", key=f"btn_edit_sit_{sid}_{iid}", help=intent["name"]):
+                                    _edit_prompt(
+                                        "intent_prompts",
+                                        iid,
+                                        intent["prompt"],
+                                        f"Промпт: {intent['name']}",
+                                    )
+                        if remaining > 0:
+                            st.caption(f"Нераспределено: {remaining}%")
 
-            st.caption(f"Профиль: {profile_name} | Очков: {remaining}")
-
-            for intent in INTENTS:
-                iid = intent["id"]
-                current = weights.get(iid, 0)
-                col1, col2 = st.columns([5, 1])
-                with col1:
-                    weights[iid] = st.slider(
-                        f"{intent['name']} ({iid})",
-                        min_value=0,
-                        max_value=100,
-                        value=current,
-                        key=f"weight_{iid}",
-                        on_change=_clamp_weight,
-                        args=(iid,),
-                        help=INTENT_HELP.get(iid),
-                    )
-                with col2:
-                    st.markdown("")
-                    st.markdown("")
-                    if st.button("✏️", key=f"btn_edit_{iid}"):
-                        _edit_prompt(
-                            "intent_prompts",
-                            iid,
-                            intent["prompt"],
-                            f"Промпт: {intent['name']}",
-                        )
-
-            if is_custom:
                 st.button(
                     "Сбросить к дефолтам",
-                    key="btn_reset_intents",
-                    on_click=_reset_intents,
+                    key="btn_reset_sit_weights",
+                    on_click=_reset_situation_weights,
                 )
 
         # ── Generation params ───────────────────────────────

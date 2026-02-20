@@ -7,7 +7,7 @@ import streamlit as st
 
 from agents.student import StudentAgent
 from agents.teacher import TeacherAgent
-from config.defaults import AVAILABLE_MODELS, INTENTS, TEACHER_GREETING
+from config.defaults import AVAILABLE_MODELS, TEACHER_GREETING
 from config.scenarios import TASK_SCENARIOS, TOPIC_SCENARIOS
 from config.settings import MAX_DIALOG_STEPS, STUDENT_AVATAR, TEACHER_AVATAR
 from models.base import Message
@@ -74,11 +74,20 @@ def _get_student_history() -> list[Message]:
 
 
 def validate_config() -> bool:
-    """Validate that intents sum to 100% and API keys are set."""
-    total = sum(st.session_state.intent_weights.values())
-    if total != 100:
-        st.error(f"Сумма вероятностей интентов = {total}% (должна быть 100%)")
-        return False
+    """Validate intent weights and API keys."""
+    if st.session_state.get("intent_mode") == "llm":
+        bad = [
+            sid for sid, w in st.session_state.situation_weights.items()
+            if sum(w.values()) != 100
+        ]
+        if bad:
+            st.error(f"Сумма весов ≠ 100 для ситуаций: {', '.join(bad)}")
+            return False
+    else:
+        total = sum(st.session_state.intent_weights.values())
+        if total != 100:
+            st.error(f"Сумма вероятностей интентов = {total}% (должна быть 100%)")
+            return False
 
     teacher_model = AVAILABLE_MODELS[st.session_state.teacher_model]
     student_model = AVAILABLE_MODELS[st.session_state.student_model]
@@ -171,8 +180,7 @@ def _stream_student_turn() -> bool:
     if intent_mode == "llm":
         llm_kwargs = {
             "intent_mode": "llm",
-            "intent_names": {i["id"]: i["name"] for i in INTENTS},
-            "student_type": st.session_state.student_type,
+            "situation_weights": st.session_state.situation_weights,
             "classifier_template": st.session_state.get("classifier_prompt", ""),
         }
 
@@ -185,6 +193,7 @@ def _stream_student_turn() -> bool:
                 temperature=st.session_state.temperature,
                 max_tokens=st.session_state.max_tokens,
                 correct_answer_prob=st.session_state.get("correct_answer_prob", 50),
+                mistake_weights=st.session_state.get("mistake_weights"),
                 **llm_kwargs,
             )
     except Exception as e:
